@@ -1,13 +1,18 @@
 package jp.sf.amateras.solr.scala.async
 
 import AsyncUtils._
+import com.ning.http.client.AsyncHandler.STATE
 import com.ning.http.client._
+import jp.sf.amateras.solr.scala.async.AbstractAsyncQueryBuilder.OurStreamingCb
 import jp.sf.amateras.solr.scala.query._
-import org.apache.solr.client.solrj.impl.XMLResponseParser
+import org.apache.http.HttpStatus
+import org.apache.solr.client.solrj.impl.{StreamingBinaryResponseParser, XMLResponseParser}
 import org.apache.solr.client.solrj.response.QueryResponse
 import org.apache.solr.client.solrj.util.ClientUtils
 import org.apache.solr.common.params.{CommonParams, ModifiableSolrParams, SolrParams}
+import akka.actor.ActorRefFactory
 import scala.concurrent._
+import scala.util.control.Exception.ultimately
 
 class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val query: String)
                        (implicit parser: ExpressionParser) extends AbstractAsyncQueryBuilder(query) {
@@ -37,4 +42,47 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
     
     promise.future
   }
+
+    protected def stream(q: SolrParams, cb: OurStreamingCb, arf: ActorRefFactory): Unit = {
+        val parser = new StreamingBinaryResponseParser(cb)
+        val wParams = new ModifiableSolrParams(q)
+        wParams.set(CommonParams.WT, parser.getWriterType)
+        wParams.set(CommonParams.VERSION, parser.getVersion)
+        val reqBody = postQueryBody(wParams)
+        val reqBuilder = httpClient preparePost s"$url/select" setHeader
+            ("Content-Type", "application/x-www-form-urlencoded") setBody reqBody
+        reqBuilder.execute(new AsyncHandler[Unit] {
+            val ais = new ActorInputStream(arf)
+
+            override def onThrowable(t: Throwable): Unit = cb.errorReceived(t)
+
+            override def onCompleted(): Unit = {
+                ais.done()
+            }
+
+            override def onStatusReceived(responseStatus: HttpResponseStatus): STATE = {
+                responseStatus.getStatusCode match {
+                    case HttpStatus.SC_OK ⇒
+                        import arf.dispatcher
+                        Future(blocking {
+                            ultimately(ais.close())(parser.processResponse(ais, null))
+                        }) onFailure {
+                            case t ⇒ cb.errorReceived(t)
+                        }
+                        STATE.CONTINUE
+                    case s ⇒
+                        ais.close()
+                        cb.errorReceived(new Exception(s"Non-OK response received: $s"))
+                        STATE.ABORT
+                }
+            }
+
+            override def onHeadersReceived(headers: HttpResponseHeaders): STATE = STATE.CONTINUE
+
+            override def onBodyPartReceived(bodyPart: HttpResponseBodyPart): STATE = {
+                ais write bodyPart.getBodyPartBytes
+                STATE.CONTINUE
+            }
+        })
+    }
 }
