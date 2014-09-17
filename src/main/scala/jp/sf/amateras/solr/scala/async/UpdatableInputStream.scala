@@ -12,12 +12,12 @@ class UpdatableInputStream extends InputStream {
     private var finished = false
     private val baos = new ByteArrayOutputStream()
 
-    def write(bytes: Array[Byte]) = this.synchronized {
+    def appendBytes(bytes: Array[Byte]) = this.synchronized {
         baos.write(bytes)
         this.notifyAll()
     }
 
-    def done() = this.synchronized {
+    def finishedAppending() = this.synchronized {
         finished = true
         this.notifyAll()
     }

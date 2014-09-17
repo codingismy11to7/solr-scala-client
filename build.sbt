@@ -13,8 +13,6 @@ resolvers += "amateras-repo" at "http://amateras.sourceforge.jp/mvn/"
 resolvers += "Local Maven Repository" at "file:///"+Path.userHome.absolutePath+"/.m2/repository"
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor" % "2.3.6" % "compile",
-  "com.typesafe.akka" %% "akka-agent" % "2.3.6" % "compile",
   "org.apache.solr" % "solr-solrj" % "4.5.1" % "compile",
   "com.ning" % "async-http-client" % "1.7.16" % "compile",
   "org.scalatest" %% "scalatest" % "2.1.6" % "test",
