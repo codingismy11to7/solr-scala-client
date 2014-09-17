@@ -43,7 +43,7 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
     promise.future
   }
 
-    protected def stream(q: SolrParams, cb: OurStreamingCb, arf: ActorRefFactory): Unit = {
+    protected def stream(q: SolrParams, cb: OurStreamingCb, arf: ActorRefFactory): Future[QueryResponse] = {
         val parser = new StreamingBinaryResponseParser(cb)
         val wParams = new ModifiableSolrParams(q)
         wParams.set(CommonParams.WT, parser.getWriterType)
@@ -51,6 +51,7 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
         val reqBody = postQueryBody(wParams)
         val reqBuilder = httpClient preparePost s"$url/select" setHeader
             ("Content-Type", "application/x-www-form-urlencoded") setBody reqBody
+        val p = Promise[QueryResponse]()
         reqBuilder.execute(new AsyncHandler[Unit] {
             val ais = new ActorInputStream(arf)
 
@@ -65,9 +66,11 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
                     case HttpStatus.SC_OK ⇒
                         import arf.dispatcher
                         Future(blocking {
-                            ultimately(ais.close())(parser.processResponse(ais, null))
+                            ultimately(ais.close()){
+                                p success new QueryResponse(parser.processResponse(ais, null), null)
+                            }
                         }) onFailure {
-                            case t ⇒ cb.errorReceived(t)
+                            case t ⇒ p failure t
                         }
                         STATE.CONTINUE
                     case s ⇒
@@ -84,5 +87,7 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
                 STATE.CONTINUE
             }
         })
+
+        p.future
     }
 }

@@ -30,12 +30,12 @@ abstract class AbstractAsyncQueryBuilder(query: String)(implicit parser: Express
         query(solrQuery, { response => responseToObject[T](response) })
     }
 
-    def streamResults(cb: OurStreamingCb, arf: ActorRefFactory, params: Any = null) = {
+    def streamResults(cb: OurStreamingCb, arf: ActorRefFactory, params: Any = null): Future[QueryResponse] = {
         solrQuery.setQuery(new QueryTemplate(query).merge(CaseClassMapper.toMap(params)))
         stream(solrQuery, cb, arf)
     }
 
     protected def query[T](solrQuery: SolrParams, success: QueryResponse => T): Future[T]
 
-    protected def stream(q: SolrParams, cb: OurStreamingCb, arf: ActorRefFactory): Unit
+    protected def stream(q: SolrParams, cb: OurStreamingCb, arf: ActorRefFactory): Future[QueryResponse]
 }
