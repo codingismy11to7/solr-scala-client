@@ -53,7 +53,7 @@ class AsyncQueryBuilder(httpClient: AsyncHttpClient, url: String, protected val 
             ("Content-Type", "application/x-www-form-urlencoded") setBody reqBody
         val p = Promise[QueryResponse]()
         reqBuilder.execute(new AsyncHandler[Unit] {
-            val ais = new AgentInputStream
+            val ais = new UpdatableInputStream
 
             override def onThrowable(t: Throwable): Unit = cb.errorReceived(t)
 
